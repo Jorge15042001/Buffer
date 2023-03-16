@@ -9,9 +9,13 @@
 #include <unistd.h>
 
 const size_t sizeof_elem = 1000 * 1000 * 3;
-const size_t buff_n_elems = 300;
+const size_t buff_n_elems = 10;
 
 struct timeval start, end,main_start;
+
+typedef  int bool;
+const int true =1;
+const int false=0;
 
 typedef enum {
   MEM_AVAILABLE,
@@ -35,6 +39,8 @@ typedef struct {
 
   WritingState w_disk_state;
   WritingState w_mem_state;
+
+  bool exit ;
 
   FILE *buff_file;
 
@@ -142,29 +148,14 @@ void *writeToDiskCircularBuffer(void *cb_ptr) {
       pthread_cond_signal(&cb->write_mem_cond);
       pthread_mutex_unlock(&cb->write_mem_mtx);
     }
+
+    if (cb->exit) break;
+
     pthread_mutex_unlock(&cb->state_mtx);
     // locks until all variables have been set to their correct values
     pthread_mutex_lock(&cb->state_mtx);
     cb->w_disk_state = NO_WRITING;
     pthread_mutex_unlock(&cb->state_mtx);
-    // set state_array to available where needed
-    /** const size_t freed_elemts = */
-    /**     (bs.size_buff_1 + bs.size_buff_2) / cb->sizeof_elem; */
-    /** for (size_t i = 0; i < freed_elemts; i++) { */
-    /**   cb->state_array[(cb->disk_idx + i) % cb->n_elements] = MEM_AVAILABLE; */
-    /**   cb->disk_idx += 1; */
-    /**   cb->disk_idx %= cb->n_elements; */
-    /**   cb->n_disk_elements++; */
-    /** } */
-    /** pthread_mutex_unlock(&cb->state_mtx); */
-    /** if (cb->w_mem_state == NO_WRITING) { */
-    /**   pthread_mutex_lock(&cb->write_mem_mtx); */
-    /**   pthread_cond_signal(&cb->write_mem_cond); */
-    /**   pthread_mutex_unlock(&cb->write_mem_mtx); */
-    /** } */
-
-    // TODO;
-    //  finish
   }
 }
 
@@ -201,7 +192,7 @@ CircularBuffer createCircularBuffer(const size_t element_size,
   char *state = malloc(n_elements);
 
   CircularBuffer cb = {mem, state, element_size, n_elements, 0, 0,
-                       0,   0,     NO_WRITING,   NO_WRITING};
+                       0,   0,     NO_WRITING,   NO_WRITING, false};
 
   cb.buff_file = fopen(buf_file_name, "wb");
 
@@ -220,9 +211,14 @@ double freeSpaceCircularBuffer(CircularBuffer *const cb) {
 void deleteCircularBuffer(CircularBuffer *const cb) {
 
   printf("destroying CircularBuffer");
-  if (freeSpaceCircularBuffer(cb) < cb->sizeof_elem * cb->n_elements) {
-    printf("deleting CircularBuffer with data");
-  }
+  cb->exit = true;
+  pthread_mutex_lock(&cb->write_disk_mtx);
+  pthread_cond_signal(&cb->write_disk_cond); // start writting to disk
+  pthread_mutex_unlock(&cb->write_disk_mtx);
+  printf("joining thread");
+  pthread_join(cb->writer_tid, NULL);
+  printf("CircularBuffer distroied");
+
 
   free(cb->mem);
   free(cb->state_array);
@@ -240,9 +236,6 @@ void deleteCircularBuffer(CircularBuffer *const cb) {
   pthread_cond_destroy(&cb->write_mem_cond);
   pthread_cond_destroy(&cb->write_disk_cond);
 
-  printf("joining thread");
-  pthread_join(cb->writer_tid, NULL);
-  printf("CircularBuffer distroied");
 }
 
 
@@ -310,7 +303,7 @@ int main(int argc, char *argv[]) {
   printf("generating frames\n");
   gettimeofday(&main_start, NULL);
 
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < 200; i++) {
 
     printf("%6d ", i);
     gettimeofday(&start, NULL);
