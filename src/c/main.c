@@ -9,7 +9,11 @@
 #include <unistd.h>
 
 const size_t sizeof_elem = 1000 * 1000 * 3;
-const size_t buff_n_elems = 10;
+const size_t buff_n_elems = 200;
+const size_t write_buff_length = sizeof_elem * buff_n_elems/10;
+const int fps = 200;
+const double sleeptime = 1/((double)fps) *1e6;
+const double save_threshold = 0.2;
 
 struct timeval start, end,main_start;
 
@@ -69,6 +73,7 @@ typedef struct {
 BuffSegmets computeBufferSegments(CircularBuffer *const cb) {
   BuffSegmets segments;
   pthread_mutex_lock(&cb->state_mtx);
+  /** printf("computing buffs %ld %ld\n",cb->mem_idx,cb->disk_idx); */
 
   if (cb->disk_idx > cb->mem_idx) {
     // segmemt 1 is all the elements from disk_idx to the last element in buff
@@ -77,6 +82,11 @@ BuffSegmets computeBufferSegments(CircularBuffer *const cb) {
     // segmemt 2 is all the elements from 0 to mem_idx
     segments.buffer_segment_2 = cb->mem;
     segments.size_buff_2 = (cb->mem_idx - 1) * cb->sizeof_elem;
+    if (cb->mem_idx == 0){
+      segments.buffer_segment_2 = NULL;
+      segments.size_buff_2 = 0;
+    }
+    /** printf("mem_idx: %ld\n",cb->mem_idx); */
   } else {
     // segment one is all the elements from disk_idx to mem_idx
     segments.buffer_segment_1 = &(cb->mem[cb->disk_idx * cb->sizeof_elem]);
@@ -90,72 +100,81 @@ BuffSegmets computeBufferSegments(CircularBuffer *const cb) {
   return segments;
 }
 
-void *writeToDiskCircularBuffer(void *cb_ptr) {
-  CircularBuffer *const cb = (CircularBuffer *)cb_ptr;
-
-  while (1) {
-    // synchronization code
+void lockWriteToDisk(CircularBuffer *const cb){
     // lock this thread
     pthread_mutex_lock(&cb->write_disk_mtx);
     // lock until signal
     printf("waiting for cond disk_cond\n");
     pthread_cond_wait(&cb->write_disk_cond, &cb->write_disk_mtx);
     // unlock the thread
-    printf("writing to disk...\n");
     pthread_mutex_unlock(&cb->write_disk_mtx);
 
+}
+
+void enableWriteToMem(CircularBuffer *const cb){
+  pthread_mutex_lock(&cb->write_mem_mtx);
+  pthread_cond_signal(&cb->write_mem_cond);
+  pthread_mutex_unlock(&cb->write_mem_mtx);
+
+}
+
+void writeBuffToDisk(CircularBuffer *const cb,const void *const mem, const size_t mem_size){
+  if (mem_size == 0) return;
+  //lop mem with write_buff_length steps
+  size_t writen = 0;
+  for (size_t i = 0; i < mem_size; i+= write_buff_length) {
+    const void *const mem_ptr = &mem[i];
+    size_t write_size = write_buff_length;
+    if (i+write_buff_length>=mem_size) {
+      write_size = mem_size - i;
+    }
+    writen += write_size;
+    /** printf("mem: %ld %ld\n",write_size,writen); */
+    fwrite(mem_ptr, write_size, 1, cb->buff_file);
+    pthread_mutex_lock(&cb->state_mtx);
+    for (size_t i = 0; i<write_size/cb->sizeof_elem;i++){
+      /** cb->state_array[(cb->disk_idx + i) % cb->n_elements] = MEM_AVAILABLE; */
+      cb->disk_idx += 1;
+      cb->disk_idx %= cb->n_elements;
+      cb->n_disk_elements++;
+    }
+    /** printf("mem: %ld %ld\n",mem_size,writen); */
+    pthread_mutex_unlock(&cb->state_mtx);
+    enableWriteToMem(cb);
+
+  }
+}
+void *writeToDiskCircularBuffer(void *cb_ptr) {
+  nice(-20);
+  CircularBuffer *const cb = (CircularBuffer *)cb_ptr;
+
+  while (1) {
+    // synchronization code
+    lockWriteToDisk(cb);
+
+    printf("writing to disk...\n");
     BuffSegmets bs = computeBufferSegments(cb);
     // set the state as writting
-    pthread_mutex_lock(&cb->state_mtx);
+    /** pthread_mutex_lock(&cb->state_mtx); */
     printf("setting w_state to WRIING\n");
     cb->w_disk_state = WRITING;
-    pthread_mutex_unlock(&cb->state_mtx);
+    /** pthread_mutex_unlock(&cb->state_mtx); */
 
     printf("writing to disk\n");
-    if (bs.size_buff_1 != 0) {
-      fwrite(bs.buffer_segment_1, bs.size_buff_1, 1, cb->buff_file);
-    }
+    /** printf("buffers: %ld %ld \n",bs.size_buff_1,bs.size_buff_2); */
 
-    pthread_mutex_lock(&cb->state_mtx);
-    for (size_t i = 0; i < bs.size_buff_1/cb->sizeof_elem; i++) {
-      cb->state_array[(cb->disk_idx + i) % cb->n_elements] = MEM_AVAILABLE;
-      cb->disk_idx += 1;
-      cb->disk_idx %= cb->n_elements;
-      cb->n_disk_elements++;
-    }
+    writeBuffToDisk(cb, bs.buffer_segment_1, bs.size_buff_1);
+    writeBuffToDisk(cb, bs.buffer_segment_2, bs.size_buff_2);
 
     if (cb->w_mem_state == NO_WRITING) {
-      pthread_mutex_lock(&cb->write_mem_mtx);
-      pthread_cond_signal(&cb->write_mem_cond);
-      pthread_mutex_unlock(&cb->write_mem_mtx);
-    }
-    pthread_mutex_unlock(&cb->state_mtx);
-
-    if (bs.size_buff_2 != 0) {
-      fwrite(bs.buffer_segment_2, bs.size_buff_2, 1, cb->buff_file);
-    }
-
-    pthread_mutex_lock(&cb->state_mtx);
-    for (size_t i = 0; i < bs.size_buff_2/cb->sizeof_elem; i++) {
-      cb->state_array[(cb->disk_idx + i) % cb->n_elements] = MEM_AVAILABLE;
-      cb->disk_idx += 1;
-      cb->disk_idx %= cb->n_elements;
-      cb->n_disk_elements++;
-    }
-
-    if (cb->w_mem_state == NO_WRITING) {
-      pthread_mutex_lock(&cb->write_mem_mtx);
-      pthread_cond_signal(&cb->write_mem_cond);
-      pthread_mutex_unlock(&cb->write_mem_mtx);
+      enableWriteToMem(cb);
     }
 
     if (cb->exit) break;
-
-    pthread_mutex_unlock(&cb->state_mtx);
     // locks until all variables have been set to their correct values
-    pthread_mutex_lock(&cb->state_mtx);
+    /** pthread_mutex_lock(&cb->state_mtx); */
     cb->w_disk_state = NO_WRITING;
-    pthread_mutex_unlock(&cb->state_mtx);
+    /** pthread_mutex_unlock(&cb->state_mtx); */
   }
 }
 
@@ -184,6 +203,11 @@ void initializeTheads(CircularBuffer *const cb) {
   pthread_cond_init(&cb->write_disk_cond, &cond_attr);
 
   pthread_create(&cb->writer_tid, &attr, &writeToDiskCircularBuffer, cb);
+
+  struct sched_param sched;
+  const int sched_type = SCHED_RR;
+  sched.sched_priority = sched_get_priority_max(sched_type);
+  pthread_setschedparam(cb->writer_tid, sched_type, &sched);
 }
 CircularBuffer createCircularBuffer(const size_t element_size,
                                     const size_t n_elements,
@@ -217,7 +241,8 @@ void deleteCircularBuffer(CircularBuffer *const cb) {
   pthread_mutex_unlock(&cb->write_disk_mtx);
   printf("joining thread");
   pthread_join(cb->writer_tid, NULL);
-  printf("CircularBuffer distroied");
+  printf("joined write thread");
+
 
 
   free(cb->mem);
@@ -236,37 +261,53 @@ void deleteCircularBuffer(CircularBuffer *const cb) {
   pthread_cond_destroy(&cb->write_mem_cond);
   pthread_cond_destroy(&cb->write_disk_cond);
 
+  printf("CircularBuffer distroied");
 }
 
+void enableWriteToDisk(CircularBuffer *const cb){
+  pthread_mutex_lock(&cb->write_disk_mtx);
+  pthread_cond_signal(&cb->write_disk_cond); // start writting to disk
+  pthread_mutex_unlock(&cb->write_disk_mtx);
+}
+void lockWriteToMem(CircularBuffer *const cb){
+  pthread_mutex_lock(&cb->write_mem_mtx);
+  pthread_cond_wait(&cb->write_mem_cond, &cb->write_mem_mtx);
+  pthread_mutex_unlock(&cb->write_mem_mtx);
+}
 
 void addCircularBuffer(CircularBuffer *const cb, void *elem_mem) {
   // check if space if available
   const double free_buff_space = freeSpaceCircularBuffer(cb);
   /** printf("free space %f \n",free_buff_space); */
-  if (free_buff_space < 0.20 && !cb->w_disk_state) {
+  printf(" %lf ",free_buff_space);
+  if (free_buff_space < save_threshold && !cb->w_disk_state) {
     // if less than 20% of memory available then write to disk before buffer is
     // empty
-    printf("\tjust sending disk_cond \n");
 
-    pthread_mutex_lock(&cb->state_mtx);
-    cb->w_disk_state = WRITING;
-    pthread_mutex_unlock(&cb->state_mtx);
-
-    pthread_mutex_lock(&cb->write_disk_mtx);
-    pthread_cond_signal(&cb->write_disk_cond); // start writting to disk
-    pthread_mutex_unlock(&cb->write_disk_mtx);
+  struct sched_param sched;
+  const int sched_type = SCHED_RR;
+  sched.sched_priority = sched_get_priority_max(sched_type);
+  pthread_setschedparam(cb->writer_tid, sched_type, &sched);
+    nice(-20);
+    /** pthread_mutex_lock(&cb->state_mtx); */
+    /** cb->w_disk_state = WRITING; */
+    /** pthread_mutex_unlock(&cb->state_mtx); */
+    enableWriteToDisk(cb);
   }
-  printf("%f ", free_buff_space);
-  if (free_buff_space == 0.0) { // todo calculate threshold
+  if ((cb->mem_idx+1)%cb->n_elements == cb->disk_idx) { // todo calculate threshold
     // if no space  available stop writing
-    pthread_mutex_lock(&cb->state_mtx);
+    /** pthread_mutex_lock(&cb->state_mtx); */
     cb->w_mem_state = NO_WRITING;
-    pthread_mutex_unlock(&cb->state_mtx);
+    /** pthread_mutex_unlock(&cb->state_mtx); */
+  struct sched_param sched;
+  const int sched_type = SCHED_RR;
+  sched.sched_priority = sched_get_priority_max(sched_type);
+  pthread_setschedparam(cb->writer_tid, sched_type, &sched);
+    nice(-20);
 
-    printf("\t\tlock writing no space available\n");
-    pthread_mutex_lock(&cb->write_mem_mtx);
-    pthread_cond_wait(&cb->write_mem_cond, &cb->write_mem_mtx);
-    pthread_mutex_unlock(&cb->write_mem_mtx);
+    /** printf("\t\tlock writing no space available\n"); */
+    enableWriteToDisk(cb);
+    lockWriteToMem(cb);
   }
 
   // copy memory in to buff
@@ -276,7 +317,7 @@ void addCircularBuffer(CircularBuffer *const cb, void *elem_mem) {
   pthread_mutex_lock(&cb->state_mtx);
   cb->w_mem_state = WRITING;
   // set state as used
-  cb->state_array[cb->mem_idx] = MEM_USED;
+  /** cb->state_array[cb->mem_idx] = MEM_USED; */
   // incremet mem_idx
   cb->mem_idx += 1;
   cb->mem_idx %= cb->n_elements;
@@ -298,12 +339,11 @@ int main(int argc, char *argv[]) {
       createCircularBuffer(sizeof_elem, buff_n_elems, buf_file_name);
   initializeTheads(&frame_buff);
 
-  sleep(2);
   unsigned char buff[sizeof_elem];
   printf("generating frames\n");
   gettimeofday(&main_start, NULL);
 
-  for (int i = 0; i < 200; i++) {
+  for (int i = 0; i < 10000; i++) {
 
     printf("%6d ", i);
     gettimeofday(&start, NULL);
@@ -314,7 +354,7 @@ int main(int argc, char *argv[]) {
     double elapsed_main_time= (end.tv_sec- main_start.tv_sec) + (end.tv_usec- main_start.tv_usec) / 1e6;    // in microseconds
 
     printf("%lf %lf\n",elapsed_time,elapsed_main_time);
-    usleep(1e6 / 200); // 200fps
+    usleep(sleeptime); // 500fps
   }
 
   deleteCircularBuffer(&frame_buff);

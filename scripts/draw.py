@@ -1,5 +1,6 @@
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def is_number(val: str):
@@ -44,6 +45,13 @@ for line in log_file.readlines():
     except Exception as e:
         print(e)
         continue
+
+frame_idx = np.array(frame_idx)
+free_mem= np.array(free_mem)
+frame_time = np.array(frame_time)
+elapse_time = np.array(elapse_time)
+
+fps = 1/frame_time
 
 ax.plot(frame_idx, free_mem, color="C0")
 ax2.plot(frame_idx, elapse_time, color="C1")
