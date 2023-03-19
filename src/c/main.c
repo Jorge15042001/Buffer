@@ -11,7 +11,8 @@
 const size_t sizeof_elem = 1000 * 1000 * 3;
 const size_t buff_n_elems = 200;
 const size_t write_buff_length = sizeof_elem * buff_n_elems/10;
-const int fps = 200;
+/** const int fps = 60;//pc computer 50 */
+const int fps = 50;
 const double sleeptime = 1/((double)fps) *1e6;
 const double save_threshold = 0.2;
 
