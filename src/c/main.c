@@ -8,11 +8,12 @@
 #include <string.h>
 #include <unistd.h>
 
-const size_t sizeof_elem = 1000 * 1000 * 3;
-const size_t buff_n_elems = 200;
-const size_t write_buff_length = sizeof_elem * buff_n_elems/10;
-/** const int fps = 60;//pc computer 50 */
-const int fps = 50;
+const size_t sizeof_elem = 640*480*1; //size of each element
+const size_t buff_n_elems = 200;//number of elements in the buffer
+const size_t write_buff_length = sizeof_elem * buff_n_elems/10;//chunk size for writting in files
+/** const int fps = 60;//pc computer 50 150 MBs */
+/** const int fps = 60;//laptop computer 1188fps 365 MBs */
+const int fps = 2000;
 const double sleeptime = 1/((double)fps) *1e6;
 const double save_threshold = 0.2;
 
@@ -344,18 +345,18 @@ int main(int argc, char *argv[]) {
   printf("generating frames\n");
   gettimeofday(&main_start, NULL);
 
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < 50000; i++) {
 
     printf("%6d ", i);
     gettimeofday(&start, NULL);
     addCircularBuffer(&frame_buff, buff);
     gettimeofday(&end, NULL);
 
-    double elapsed_time= (end.tv_sec- start.tv_sec) + (end.tv_usec- start.tv_usec) / 1e6;    // in microseconds
-    double elapsed_main_time= (end.tv_sec- main_start.tv_sec) + (end.tv_usec- main_start.tv_usec) / 1e6;    // in microseconds
+    double elapsed_time= (end.tv_sec- start.tv_sec) + (end.tv_usec- start.tv_usec) / 1e6; 
+    double elapsed_main_time= (end.tv_sec- main_start.tv_sec) + (end.tv_usec- main_start.tv_usec) / 1e6;
 
     printf("%lf %lf\n",elapsed_time,elapsed_main_time);
-    usleep(sleeptime); // 500fps
+    usleep(sleeptime);
   }
 
   deleteCircularBuffer(&frame_buff);
