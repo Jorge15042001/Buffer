@@ -18,9 +18,9 @@ CircularBuffer createCircularBuffer(const size_t element_size,
                        0,
                        0,
                        0,
-                       FALSE,
-                       FALSE,
-                       FALSE,
+                       False,
+                       False,
+                       False,
                        fopen(buf_file_name, "wb")};
 
   fprintf(stderr, "CircularBuffer created\n");
@@ -72,7 +72,7 @@ void *writeToDiskCircularBuffer(void *cb_ptr) {
     // set the state as writting
     /** pthread_mutex_lock(&cb->state_mtx); */
     printf("setting w_state to WRIING\n");
-    cb->writing_to_disk = TRUE;
+    cb->writing_to_disk = True;
     /** pthread_mutex_unlock(&cb->state_mtx); */
 
     printf("writing to disk\n");
@@ -89,7 +89,7 @@ void *writeToDiskCircularBuffer(void *cb_ptr) {
       break;
     // locks until all variables have been set to their correct values
     /** pthread_mutex_lock(&cb->state_mtx); */
-    cb->writing_to_disk = FALSE;
+    cb->writing_to_disk = False;
     /** pthread_mutex_unlock(&cb->state_mtx); */
   }
 }
@@ -97,7 +97,7 @@ void *writeToDiskCircularBuffer(void *cb_ptr) {
 void deleteCircularBuffer(CircularBuffer *const cb) {
 
   printf("destroying CircularBuffer");
-  cb->exit = TRUE;
+  cb->exit = True;
   pthread_mutex_lock(&cb->write_disk_mtx);
   pthread_cond_signal(&cb->write_disk_cond); // start writting to disk
   pthread_mutex_unlock(&cb->write_disk_mtx);
@@ -145,7 +145,7 @@ void addCircularBuffer(CircularBuffer *const cb, const void *const elem_mem) {
       cb->disk_idx) { // todo calculate threshold
     // if no space  available stop writing
     /** pthread_mutex_lock(&cb->state_mtx); */
-    cb->writing_to_mem = FALSE;
+    cb->writing_to_mem = False;
     /** pthread_mutex_unlock(&cb->state_mtx); */
     struct sched_param sched;
     const int sched_type = SCHED_RR;
@@ -163,7 +163,7 @@ void addCircularBuffer(CircularBuffer *const cb, const void *const elem_mem) {
   memcpy(mem, elem_mem, cb->sizeof_elem);
 
   pthread_mutex_lock(&cb->state_mtx);
-  cb->writing_to_mem = TRUE;
+  cb->writing_to_mem = True;
   // set state as used
   /** cb->state_array[cb->mem_idx] = MEM_USED; */
   // incremet mem_idx

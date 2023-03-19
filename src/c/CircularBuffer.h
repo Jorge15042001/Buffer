@@ -5,8 +5,8 @@
 #include <unistd.h>
 
 typedef int bool_t;
-static const int TRUE = 1;
-static const int FALSE = 0;
+static const int True = 1;
+static const int False = 0;
 
 typedef struct {
   void *mem;
