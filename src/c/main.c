@@ -23,7 +23,7 @@ const double save_threshold = 0.2;
 
 struct timeval start, end, main_start;
 
-int main(int argc, char *argv[]) {
+int main(void) {
   // file to write buffer content
   printf("Initializing program...");
   const char *const buf_file_name = "./file.buf";

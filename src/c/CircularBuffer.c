@@ -5,15 +5,23 @@
 CircularBuffer createCircularBuffer(const size_t element_size,
                                     const size_t n_elements,
                                     const size_t write_buff_length,
-                                    const double save_threshold ,
+                                    const double save_threshold,
                                     const char *const buf_file_name) {
   void *mem = malloc(element_size * n_elements);
 
-  CircularBuffer cb = {
-      mem,   element_size, n_elements, write_buff_length,save_threshold, 0, 0, 0, 0,
-      FALSE, FALSE,        FALSE};
-
-  cb.buff_file = fopen(buf_file_name, "wb");
+  CircularBuffer cb = {mem,
+                       element_size,
+                       n_elements,
+                       write_buff_length,
+                       save_threshold,
+                       0,
+                       0,
+                       0,
+                       0,
+                       FALSE,
+                       FALSE,
+                       FALSE,
+                       fopen(buf_file_name, "wb")};
 
   fprintf(stderr, "CircularBuffer created\n");
   return cb;
@@ -50,7 +58,6 @@ void initializeTheadsCircularBuffer(CircularBuffer *const cb) {
   sched.sched_priority = sched_get_priority_max(sched_type);
   pthread_setschedparam(cb->writer_tid, sched_type, &sched);
 }
-
 
 void *writeToDiskCircularBuffer(void *cb_ptr) {
   nice(-20);
@@ -235,14 +242,12 @@ void writeBuffToDisk(CircularBuffer *const cb, const void *const mem,
   if (mem_size == 0)
     return;
   // lop mem with write_buff_length steps
-  size_t writen = 0;
   for (size_t i = 0; i < mem_size; i += cb->write_buff_length) {
     const void *const mem_ptr = &mem[i];
     size_t write_size = cb->write_buff_length;
     if (i + cb->write_buff_length >= mem_size) {
       write_size = mem_size - i;
     }
-    writen += write_size;
     /** printf("mem: %ld %ld\n",write_size,writen); */
     fwrite(mem_ptr, write_size, 1, cb->buff_file);
     pthread_mutex_lock(&cb->state_mtx);
@@ -258,6 +263,3 @@ void writeBuffToDisk(CircularBuffer *const cb, const void *const mem,
     enableWriteToMem(cb);
   }
 }
-
-
-
