@@ -9,16 +9,29 @@ OBJ_FILES_controler := $(patsubst $(SRC_DIR_controler)/%.c,$(OBJ_DIR_controler)/
 
 
 # CXXFLAGS := -O3 -Wall -Wextra  -fsanitize=address
-CXXFLAGS := -Wall -Wextra  -fsanitize=address -lpthread
+CXXFLAGS := -Wall -O3 -Wextra  -fsanitize=address -lpthread
 
+LIBS:=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gstreamer-1.0 --libs)
+LIBS:=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gstreamer-video-1.0 --libs)
+LIBS+=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gobject-introspection-1.0 --libs)
+LIBS+=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config tcam --libs)
+
+# to build within the source tree
+# enable the following lines
+# and source build directory ./env.sh
+# LIBS+=-L./../../build/libs
+
+CFLAGS:=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gstreamer-1.0 --cflags)
+CFLAGS:=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gstreamer-video-1.0 --cflags)
+CFLAGS+=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gobject-introspection-1.0 --cflags)
+CFLAGS+=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config tcam --cflags)
 
 $(OBJ_DIR_controler)/%.o: $(SRC_DIR_controler)/%.c
 	mkdir -p $(OBJ_DIR_controler)
-	$(CC)   $(CXXFLAGS)   -c -o $@ $^
+	$(CC) -ltcam-property   $(CXXFLAGS)  $(CFLAGS)   -c -o $@ $^ $(LIBS)
 
 $(OUTPUT_CONTROLER): $(OBJ_FILES_controler)
-	$(CC)  -o $@ $^   $(CXXFLAGS)
-
+	$(CC) -ltcam-property  $(CFLAGS)   -o $@ $^   $(CXXFLAGS) $(LIBS)
 
 
 all: $(OUTPUT_CONTROLER)

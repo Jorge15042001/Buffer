@@ -23,7 +23,7 @@ CircularBuffer createCircularBuffer(const size_t element_size,
                        False,
                        fopen(buf_file_name, "wb")};
 
-  fprintf(stderr, "CircularBuffer created\n");
+  printf("CircularBuffer created\n");
   return cb;
 }
 
@@ -67,15 +67,12 @@ void *writeToDiskCircularBuffer(void *cb_ptr) {
     // synchronization code
     lockWriteToDisk(cb);
 
-    printf("writing to disk...\n");
     BuffSegmets bs = computeBufferSegments(cb);
     // set the state as writting
     /** pthread_mutex_lock(&cb->state_mtx); */
-    printf("setting w_state to WRIING\n");
     cb->writing_to_disk = True;
     /** pthread_mutex_unlock(&cb->state_mtx); */
 
-    printf("writing to disk\n");
     /** printf("buffers: %ld %ld \n",bs.size_buff_1,bs.size_buff_2); */
 
     writeBuffToDisk(cb, bs.buffer_segment_1, bs.size_buff_1);
@@ -123,10 +120,10 @@ void deleteCircularBuffer(CircularBuffer *const cb) {
 }
 
 void addCircularBuffer(CircularBuffer *const cb, const void *const elem_mem) {
+  printf("adding element\n");
   // check if space if available
   const double free_buff_space = freeSpaceCircularBuffer(cb);
-  /** printf("free space %f \n",free_buff_space); */
-  printf(" %lf ", free_buff_space);
+  printf("free space %f \n",free_buff_space);
   if (free_buff_space < cb->save_threshold && !cb->writing_to_disk) {
     // if less than 20% of memory available then write to disk before buffer is
     // empty
@@ -153,7 +150,7 @@ void addCircularBuffer(CircularBuffer *const cb, const void *const elem_mem) {
     pthread_setschedparam(cb->writer_tid, sched_type, &sched);
     nice(-20);
 
-    /** printf("\t\tlock writing no space available\n"); */
+    printf("\t\tlock writing no space available\n");
     enableWriteToDisk(cb);
     lockWriteToMem(cb);
   }
