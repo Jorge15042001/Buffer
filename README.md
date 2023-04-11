@@ -10,3 +10,9 @@ buffer in to the disk.
 * Thread safe
 
 * High level api
+
+* C low level api and CPP high level api
+
+## Instalation
+
+## Getting started 
