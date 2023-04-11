@@ -119,7 +119,7 @@ TcamCamera::~TcamCamera()
 bool TcamCamera::create_pipeline()
 {
     GError *error = nullptr;
-    pipeline_ = gst_parse_launch("tcambin name=source ! capsfilter name=caps ! queue ! appsink name=sink sync=false", &error);
+    pipeline_ = gst_parse_launch("tcambin name=source ! capsfilter name=caps ! queue max-size-buffers=1 leaky=no ! appsink name=sink sync=false", &error);
 
    	if (error)
 	{

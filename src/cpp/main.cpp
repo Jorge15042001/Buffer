@@ -130,7 +130,7 @@ GstFlowReturn new_frame_cb(GstAppSink *appsink, gpointer data) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv) {
   gst_init(&argc, &argv);
-  gst_debug_set_default_threshold(GST_LEVEL_COUNT);
+  gst_debug_set_default_threshold(GST_LEVEL_WARNING);
 
 
   cb::CircularBuf<frame_t> a(buff_n_elems,write_buff_length,save_threshold,buf_file_name);
